@@ -10,7 +10,8 @@ final appRouter = GoRouter(
   initialLocation: RouteNames.login,
   redirect: (context, state) {
     final isLoggedIn = Supabase.instance.client.auth.currentSession != null;
-    final isAuthRoute = state.matchedLocation == RouteNames.login ||
+    final isAuthRoute =
+        state.matchedLocation == RouteNames.login ||
         state.matchedLocation == RouteNames.register;
 
     if (isLoggedIn && isAuthRoute) return RouteNames.home;
@@ -31,9 +32,8 @@ final appRouter = GoRouter(
     GoRoute(
       path: RouteNames.home,
       name: RouteNames.home,
-      builder: (context, state) => const Scaffold(
-        body: Center(child: Text('Home — em construção')),
-      ),
+      builder: (context, state) =>
+          const Scaffold(body: Center(child: Text('Home — em construção'))),
     ),
   ],
 );

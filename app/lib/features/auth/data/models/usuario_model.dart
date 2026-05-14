@@ -11,8 +11,8 @@ class UsuarioModel extends Usuario {
   });
 
   factory UsuarioModel.fromSupabaseUser(User user) => UsuarioModel(
-        id: user.id,
-        email: user.email ?? '',
-        nome: user.userMetadata?['nome'] as String?,
-      );
+    id: user.id,
+    email: user.email ?? '',
+    nome: user.userMetadata?['nome'] as String?,
+  );
 }

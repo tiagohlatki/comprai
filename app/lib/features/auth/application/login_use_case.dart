@@ -13,6 +13,5 @@ class LoginUseCase {
   Future<Either<Failure, Usuario>> execute({
     required String email,
     required String senha,
-  }) =>
-      _repository.login(email: email, senha: senha);
+  }) => _repository.login(email: email, senha: senha);
 }

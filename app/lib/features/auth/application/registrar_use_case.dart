@@ -13,6 +13,5 @@ class RegistrarUseCase {
   Future<Either<Failure, Usuario>> execute({
     required String email,
     required String senha,
-  }) =>
-      _repository.registrar(email: email, senha: senha);
+  }) => _repository.registrar(email: email, senha: senha);
 }

@@ -14,7 +14,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
   final SairUseCase _sair;
 
   AuthBloc(this._login, this._registrar, this._sair)
-      : super(const AuthInicial()) {
+    : super(const AuthInicial()) {
     on<AuthLoginSolicitado>(_onLoginSolicitado);
     on<AuthRegistroSolicitado>(_onRegistroSolicitado);
     on<AuthSairSolicitado>(_onSairSolicitado);
@@ -37,8 +37,10 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     Emitter<AuthState> emit,
   ) async {
     emit(const AuthCarregando());
-    final result =
-        await _registrar.execute(email: event.email, senha: event.senha);
+    final result = await _registrar.execute(
+      email: event.email,
+      senha: event.senha,
+    );
     result.fold(
       (failure) => emit(AuthErro(failure.message)),
       (usuario) => emit(AuthAutenticado(usuario)),

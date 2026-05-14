@@ -38,7 +38,10 @@ class _RegisterPageState extends State<RegisterPage> {
           if (state is AuthAutenticado) context.go(RouteNames.home);
           if (state is AuthErro) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.mensagem), backgroundColor: Colors.red),
+              SnackBar(
+                content: Text(state.mensagem),
+                backgroundColor: Colors.red,
+              ),
             );
           }
         },
@@ -79,7 +82,8 @@ class _RegisterPageState extends State<RegisterPage> {
                           border: OutlineInputBorder(),
                         ),
                         validator: (value) {
-                          if (value == null || value.isEmpty) return 'Informe uma senha';
+                          if (value == null || value.isEmpty)
+                            return 'Informe uma senha';
                           if (value.length < 6) return 'Mínimo 6 caracteres';
                           return null;
                         },
@@ -107,18 +111,20 @@ class _RegisterPageState extends State<RegisterPage> {
                             : () {
                                 if (_formKey.currentState!.validate()) {
                                   context.read<AuthBloc>().add(
-                                        AuthRegistroSolicitado(
-                                          email: _emailController.text.trim(),
-                                          senha: _senhaController.text,
-                                        ),
-                                      );
+                                    AuthRegistroSolicitado(
+                                      email: _emailController.text.trim(),
+                                      senha: _senhaController.text,
+                                    ),
+                                  );
                                 }
                               },
                         child: state is AuthCarregando
                             ? const SizedBox(
                                 height: 20,
                                 width: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Text('Criar conta'),
                       ),
