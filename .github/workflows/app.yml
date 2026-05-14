@@ -65,7 +65,12 @@ jobs:
         run: flutter pub get
 
       - name: Build APK release
-        run: flutter build apk --release
-          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
-          --dart-define=GOOGLE_MAPS_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+        run: |
+          flutter build apk --release \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            --dart-define=GOOGLE_MAPS_KEY="$GOOGLE_MAPS_KEY"
