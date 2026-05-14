@@ -1,0 +1,55 @@
+name: Database Migrations
+
+on:
+  push:
+    paths:
+      - 'backend/supabase/migrations/**'
+      - '.github/workflows/migrations.yml'
+  pull_request:
+    paths:
+      - 'backend/supabase/migrations/**'
+
+jobs:
+  validate:
+    name: Validate & Test Migrations
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase local
+        run: supabase start
+        working-directory: backend
+
+      - name: Lint SQL
+        run: supabase db lint
+        working-directory: backend
+
+      - name: Stop Supabase
+        run: supabase stop
+        working-directory: backend
+        if: always()
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy migrations to staging
+        run: supabase db push
+        working-directory: backend
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}

@@ -1,0 +1,61 @@
+# ================================
+# Secrets & environment
+# ================================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ================================
+# Flutter / Dart
+# ================================
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/build/
+app/android/local.properties
+app/android/.gradle/
+app/android/key.properties
+app/ios/Pods/
+app/ios/.symlinks/
+app/coverage/
+app/*.iml
+app/pubspec.lock
+
+# ================================
+# Next.js / Node
+# ================================
+backoffice/.next/
+backoffice/out/
+backoffice/node_modules/
+backoffice/coverage/
+backoffice/.vercel/
+backoffice/.turbo/
+
+# ================================
+# Backend / Node
+# ================================
+backend/functions/*/node_modules/
+backend/functions/*/dist/
+backend/functions/*/coverage/
+backend/functions/*/.env
+
+# ================================
+# Supabase
+# ================================
+backend/supabase/.branches/
+backend/supabase/.temp/
+supabase/.branches/
+supabase/.temp/
+
+# ================================
+# IDEs & OS
+# ================================
+.DS_Store
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+Thumbs.db
