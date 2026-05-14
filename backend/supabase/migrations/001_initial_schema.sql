@@ -3,15 +3,11 @@
 -- Tabelas principais do comprai
 -- =============================================================
 
--- Extensões necessárias
-create extension if not exists "uuid-ossp";
-create extension if not exists "postgis";    -- para latitude/longitude
-
 -- =============================================================
 -- Tabela: estabelecimentos
 -- =============================================================
 create table if not exists estabelecimentos (
-    id              uuid primary key default uuid_generate_v4(),
+    id              uuid primary key default gen_random_uuid(),
     cnpj            varchar(14) not null unique,
     nome            text        not null,
     endereco        text,
@@ -26,7 +22,7 @@ create table if not exists estabelecimentos (
 -- Tabela: produtos
 -- =============================================================
 create table if not exists produtos (
-    id              uuid primary key default uuid_generate_v4(),
+    id              uuid primary key default gen_random_uuid(),
     ean             varchar(14) unique,          -- null quando SEM GTIN
     nome_canonical  text        not null,
     categoria       text,
@@ -37,7 +33,7 @@ create table if not exists produtos (
 -- Tabela: produto_aliases
 -- =============================================================
 create table if not exists produto_aliases (
-    id          uuid primary key default uuid_generate_v4(),
+    id          uuid primary key default gen_random_uuid(),
     produto_id  uuid        not null references produtos(id) on delete cascade,
     nome_raw    text        not null,
     fonte       text        not null,            -- ex: 'nfce_pr'
@@ -49,7 +45,7 @@ create table if not exists produto_aliases (
 -- Tabela: precos
 -- =============================================================
 create table if not exists precos (
-    id                  uuid primary key default uuid_generate_v4(),
+    id                  uuid primary key default gen_random_uuid(),
     produto_id          uuid            not null references produtos(id),
     estabelecimento_id  uuid            not null references estabelecimentos(id),
     user_id             uuid            not null references auth.users(id),
@@ -63,7 +59,7 @@ create table if not exists precos (
 -- Tabela: listas_compra
 -- =============================================================
 create table if not exists listas_compra (
-    id          uuid primary key default uuid_generate_v4(),
+    id          uuid primary key default gen_random_uuid(),
     user_id     uuid not null references auth.users(id) on delete cascade,
     nome        text not null,
     created_at  timestamptz not null default now()
@@ -73,7 +69,7 @@ create table if not exists listas_compra (
 -- Tabela: itens_lista
 -- =============================================================
 create table if not exists itens_lista (
-    id          uuid primary key default uuid_generate_v4(),
+    id          uuid primary key default gen_random_uuid(),
     lista_id    uuid    not null references listas_compra(id) on delete cascade,
     produto_id  uuid    not null references produtos(id),
     quantidade  numeric(10, 3) not null default 1,
