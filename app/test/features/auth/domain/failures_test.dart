@@ -19,11 +19,13 @@ void main() {
       expect(a, equals(b));
     });
 
-    test('dado_falhasTiposDiferentes_quando_mesmaMensagem_entao_naoSaoIguais',
-        () {
-      const a = AuthFailure('erro');
-      const b = NetworkFailure('erro');
-      expect(a, isNot(equals(b)));
-    });
+    test(
+      'dado_falhasTiposDiferentes_quando_mesmaMensagem_entao_naoSaoIguais',
+      () {
+        const a = AuthFailure('erro');
+        const b = NetworkFailure('erro');
+        expect(a, isNot(equals(b)));
+      },
+    );
   });
 }
