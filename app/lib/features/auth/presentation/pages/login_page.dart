@@ -96,8 +96,9 @@ class _LoginPageState extends State<LoginPage> {
                           border: OutlineInputBorder(),
                         ),
                         validator: (value) {
-                          if (value == null || value.isEmpty)
+                          if (value == null || value.isEmpty) {
                             return 'Informe sua senha';
+                          }
                           if (value.length < 6) return 'Mínimo 6 caracteres';
                           return null;
                         },

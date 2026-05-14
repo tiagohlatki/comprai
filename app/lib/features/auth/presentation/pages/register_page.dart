@@ -82,8 +82,9 @@ class _RegisterPageState extends State<RegisterPage> {
                           border: OutlineInputBorder(),
                         ),
                         validator: (value) {
-                          if (value == null || value.isEmpty)
+                          if (value == null || value.isEmpty) {
                             return 'Informe uma senha';
+                          }
                           if (value.length < 6) return 'Mínimo 6 caracteres';
                           return null;
                         },

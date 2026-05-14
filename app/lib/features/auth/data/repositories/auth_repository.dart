@@ -23,8 +23,9 @@ class AuthRepository implements IAuthRepository {
         password: senha,
       );
       final user = response.user;
-      if (user == null)
+      if (user == null) {
         return left(const AuthFailure('Login sem usuário retornado'));
+      }
       return right(UsuarioModel.fromSupabaseUser(user));
     } on AuthException catch (e) {
       return left(AuthFailure(e.message));
@@ -41,8 +42,9 @@ class AuthRepository implements IAuthRepository {
     try {
       final response = await _client.auth.signUp(email: email, password: senha);
       final user = response.user;
-      if (user == null)
+      if (user == null) {
         return left(const AuthFailure('Cadastro sem usuário retornado'));
+      }
       return right(UsuarioModel.fromSupabaseUser(user));
     } on AuthException catch (e) {
       return left(AuthFailure(e.message));
