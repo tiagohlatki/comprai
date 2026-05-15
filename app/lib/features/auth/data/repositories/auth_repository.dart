@@ -57,11 +57,15 @@ class AuthRepository implements IAuthRepository {
   @override
   Future<Either<Failure, Unit>> loginComGoogle() async {
     try {
-      // redirectTo aponta para a porta real do app em desenvolvimento web
-      final redirectTo = kIsWeb ? Uri.base.origin : null;
+      // Web: redireciona para a origem (ex: http://localhost:8080)
+      // Android: usa deep link scheme para devolver o controle ao app
+      final redirectTo = kIsWeb
+          ? Uri.base.origin
+          : 'br.com.comprai.comprai://login-callback/';
       await _client.auth.signInWithOAuth(
         OAuthProvider.google,
         redirectTo: redirectTo,
+        queryParams: {'prompt': 'select_account'},
       );
       return right(unit);
     } on AuthException catch (e) {

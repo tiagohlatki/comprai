@@ -5,8 +5,11 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/auth/presentation/pages/login_page.dart';
-import '../../features/auth/presentation/pages/login_prototype_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
+import '../../features/home/presentation/pages/home_page.dart';
+import '../../features/scan/domain/entities/nfce_data.dart';
+import '../../features/scan/presentation/pages/nfce_confirmation_page.dart';
+import '../../features/scan/presentation/pages/scan_page.dart';
 import '../utils/route_names.dart';
 
 /// Notifica o GoRouter sempre que o estado de autenticação do Supabase mudar.
@@ -42,9 +45,7 @@ final appRouter = GoRouter(
     }
 
     final isAuthRoute =
-        location == RouteNames.login ||
-        location == RouteNames.register ||
-        location == '/prototype';
+        location == RouteNames.login || location == RouteNames.register;
 
     if (isLoggedIn && isAuthRoute) return RouteNames.home;
     if (!isLoggedIn && !isAuthRoute) return RouteNames.login;
@@ -64,12 +65,16 @@ final appRouter = GoRouter(
     GoRoute(
       path: RouteNames.home,
       name: RouteNames.home,
-      builder: (context, state) =>
-          const Scaffold(body: Center(child: Text('Home — em construção'))),
+      builder: (context, state) => const HomePage(),
     ),
     GoRoute(
-      path: '/prototype',
-      builder: (context, state) => const LoginPrototypePage(),
+      path: RouteNames.scan,
+      builder: (context, state) => const ScanPage(),
+    ),
+    GoRoute(
+      path: RouteNames.nfceConfirmacao,
+      builder: (context, state) =>
+          NfceConfirmacaoPage(data: state.extra as NfceData),
     ),
   ],
 );
