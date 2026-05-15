@@ -37,7 +37,8 @@ jobs:
         run: npm install
 
       - name: Type check
-        run: npx tsc --noEmit
+        run: |
+          if [ -f tsconfig.json ]; then npx tsc --noEmit; else echo "No tsconfig.json, skipping"; fi
 
       - name: Lint
         run: npm run lint

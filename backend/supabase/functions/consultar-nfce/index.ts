@@ -160,13 +160,11 @@ function parseSefazHtml(html: string, chave: string): NfceResult {
   const totalItens = itens.reduce((sum, i) => sum + i.precoTotal, 0);
   // Aceita o total extraído apenas se estiver dentro de 1% da soma dos itens.
   // Evita valores corrompidos por seletores que pegam containers com campos concatenados.
-  const totalOk =
-    totalExtraido > 0 &&
+  const totalOk = totalExtraido > 0 &&
     totalItens > 0 &&
     Math.abs(totalExtraido - totalItens) / totalItens < 0.01;
   const total = totalOk ? totalExtraido : totalItens;
   const dataCompra = extractDataCompra(doc, html);
-
 
   return {
     chave,
@@ -295,7 +293,7 @@ function parseEndereco(
   // Tenta extrair cidade/UF do padrão "... - Cidade/UF" ou "... Cidade - UF"
   const m =
     raw.match(/[-–]\s*([A-ZÀ-Úa-zà-ú\s]{2,40})\s*[-\/]\s*([A-Z]{2})\b/) ||
-    raw.match(/\b([A-ZÀ-Úa-zà-ú\s]{2,40})\s*[/-]\s*([A-Z]{2})\s*$/) ;
+    raw.match(/\b([A-ZÀ-Úa-zà-ú\s]{2,40})\s*[/-]\s*([A-Z]{2})\s*$/);
   return {
     endereco: raw.replace(/\s+/g, " ").trim(),
     cidade: m ? m[1].trim() : null,
@@ -368,8 +366,7 @@ function parseSpanRows(
     const el = row as Element;
 
     // Nome do produto
-    const nomeEl =
-      el.querySelector(".txtTit2") ??
+    const nomeEl = el.querySelector(".txtTit2") ??
       el.querySelector(".txtTit") ??
       el.querySelector("[class*='Tit']");
     const nome = nomeEl?.textContent?.trim() ?? "";
@@ -379,8 +376,7 @@ function parseSpanRows(
     // EAN / código — extrai apenas se for numérico de 8–14 dígitos
     const codEl = el.querySelector(".RCod, [class*='Cod']");
     const codText = codEl?.textContent?.replace(/[^0-9]/g, "") ?? "";
-    const ean =
-      codText.length >= 8 && codText.length <= 14 ? codText : null;
+    const ean = codText.length >= 8 && codText.length <= 14 ? codText : null;
 
     // Quantidade — span class="Rqtd", texto: "Qtde.:46,3" ou "46,3"
     const qtdEl = el.querySelector(".Rqtd, [class*='qtd']");
@@ -388,7 +384,9 @@ function parseSpanRows(
     const quantidade = parseBrNumber(qtdText.replace(/[^0-9.,]/g, "")) || 1;
 
     // Preço unitário — span class="RvlUnit"
-    const unitEl = el.querySelector(".RvlUnit, [class*='vlUnit'], [class*='VlUnit']");
+    const unitEl = el.querySelector(
+      ".RvlUnit, [class*='vlUnit'], [class*='VlUnit']",
+    );
     const precoUnitario = parseBrNumber(
       unitEl?.textContent?.replace(/[^0-9.,]/g, "") ?? "0",
     );
@@ -396,7 +394,7 @@ function parseSpanRows(
     // Preço total — segunda <td> da linha ou span class="RvlTot"
     const totEl =
       el.querySelector(".RvlTot, [class*='vlTot'], [class*='VlTot']") ??
-      Array.from(el.querySelectorAll("td")).at(-1);
+        Array.from(el.querySelectorAll("td")).at(-1);
     const precoTotal =
       parseBrNumber(totEl?.textContent?.replace(/[^0-9.,]/g, "") ?? "0") ||
       precoUnitario * quantidade;
@@ -497,7 +495,8 @@ function extractDataCompra(
   html: string,
 ): string {
   // Padrão: DD/MM/YYYY HH:MM:SS ou DD/MM/YYYY
-  const dateRegex = /(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/;
+  const dateRegex =
+    /(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/;
   const plainText = html.replace(/<[^>]+>/g, " ");
 
   // Procura próximo a "emissão" ou "data"
@@ -533,8 +532,7 @@ async function geocode(
     .filter(Boolean)
     .join(", ");
 
-  const url =
-    "https://nominatim.openstreetmap.org/search?" +
+  const url = "https://nominatim.openstreetmap.org/search?" +
     new URLSearchParams({ q: query, format: "json", limit: "1" });
 
   const resp = await fetch(url, {
