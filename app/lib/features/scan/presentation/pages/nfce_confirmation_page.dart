@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/nfce_data.dart';
 
@@ -15,31 +16,158 @@ String _brl(double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
 String _formatDate(DateTime dt) {
   final d = dt.day.toString().padLeft(2, '0');
   final m = dt.month.toString().padLeft(2, '0');
-  final y = dt.year.toString();
-  return '$d/$m/$y';
+  return '$d/$m/${dt.year}';
 }
 
-class NfceConfirmacaoPage extends StatelessWidget {
+class NfceConfirmacaoPage extends StatefulWidget {
   const NfceConfirmacaoPage({super.key, required this.data});
 
   final NfceData data;
 
-  void _salvar(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Em breve: integração com SEFAZ em desenvolvimento 🛠️',
-          style: TextStyle(color: _teal),
+  @override
+  State<NfceConfirmacaoPage> createState() => _NfceConfirmacaoPageState();
+}
+
+class _NfceConfirmacaoPageState extends State<NfceConfirmacaoPage> {
+  bool _saving = false;
+
+  Future<void> _salvar() async {
+    setState(() => _saving = true);
+    try {
+      await _persistirNfce(widget.data);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Compra salva com sucesso! ✅',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: Color(0xFF16A34A),
+          behavior: SnackBarBehavior.floating,
         ),
-        backgroundColor: _card,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    context.pop();
+      );
+      context.pop();
+    } on _DuplicateChaveException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Esta nota já foi salva anteriormente.',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: _card,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      context.pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Erro ao salvar: ${e.toString()}',
+            style: const TextStyle(color: Colors.white),
+          ),
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
+  // -------------------------------------------------------------------------
+  // Persistência no Supabase
+  // -------------------------------------------------------------------------
+  Future<void> _persistirNfce(NfceData data) async {
+    final client = Supabase.instance.client;
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) throw Exception('Usuário não autenticado');
+
+    // 1. Upsert estabelecimento (idempotente por CNPJ)
+    final estabResp = await client
+        .from('estabelecimentos')
+        .upsert({
+          'cnpj': _cleanCnpj(data.estabelecimento.cnpj),
+          'nome': data.estabelecimento.nome,
+          'endereco': data.estabelecimento.endereco,
+          'cidade': data.estabelecimento.cidade,
+          'estado': data.estabelecimento.estado,
+          if (data.estabelecimento.latitude != null)
+            'latitude': data.estabelecimento.latitude,
+          if (data.estabelecimento.longitude != null)
+            'longitude': data.estabelecimento.longitude,
+        }, onConflict: 'cnpj')
+        .select('id')
+        .single();
+
+    final estabelecimentoId = estabResp['id'] as String;
+
+    // 2. Upsert produtos e inserir preços
+    for (final item in data.itens) {
+      final produtoId = await _upsertProduto(client, item);
+
+      // 3. Insert preço (chave NFC-e garante idempotência via unique constraint)
+      try {
+        await client.from('precos').insert({
+          'produto_id': produtoId,
+          'estabelecimento_id': estabelecimentoId,
+          'user_id': userId,
+          'preco_unitario': item.precoUnitario,
+          'data_compra': data.dataCompra.toIso8601String().substring(0, 10),
+          'nfce_chave': data.chave,
+        });
+      } on PostgrestException catch (e) {
+        // Código 23505 = unique violation → chave já salva
+        if (e.code == '23505') throw const _DuplicateChaveException();
+        rethrow;
+      }
+    }
+  }
+
+  Future<String> _upsertProduto(SupabaseClient client, NfceItem item) async {
+    // Tenta por EAN primeiro (mais confiável)
+    if (item.ean != null && item.ean!.isNotEmpty) {
+      final resp = await client
+          .from('produtos')
+          .upsert({
+            'ean': item.ean,
+            'nome_canonical': item.nome.toUpperCase(),
+          }, onConflict: 'ean')
+          .select('id')
+          .single();
+      return resp['id'] as String;
+    }
+
+    // Sem EAN: tenta match por nome_canonical (case-insensitive)
+    final existing = await client
+        .from('produtos')
+        .select('id')
+        .ilike('nome_canonical', item.nome.trim())
+        .maybeSingle();
+
+    if (existing != null) {
+      return existing['id'] as String;
+    }
+
+    // Não existe: insere novo produto
+    final inserted = await client
+        .from('produtos')
+        .insert({'nome_canonical': item.nome.toUpperCase()})
+        .select('id')
+        .single();
+    return inserted['id'] as String;
+  }
+
+  String _cleanCnpj(String cnpj) => cnpj.replaceAll(RegExp(r'[^0-9]'), '');
+
+  // -------------------------------------------------------------------------
+  // UI
+  // -------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
+    final data = widget.data;
     return Scaffold(
       backgroundColor: _bg,
       body: SafeArea(
@@ -135,26 +263,28 @@ class NfceConfirmacaoPage extends StatelessWidget {
                               fontSize: 12,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.location_on_outlined,
-                                color: _textSecondary,
-                                size: 13,
-                              ),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  data.estabelecimento.endereco,
-                                  style: const TextStyle(
-                                    color: _textSecondary,
-                                    fontSize: 12,
+                          if (data.estabelecimento.endereco.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.location_on_outlined,
+                                  color: _textSecondary,
+                                  size: 13,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    data.estabelecimento.endereco,
+                                    style: const TextStyle(
+                                      color: _textSecondary,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
+                          ],
                           const SizedBox(height: 4),
                           Row(
                             children: [
@@ -304,15 +434,15 @@ class NfceConfirmacaoPage extends StatelessWidget {
                   const SizedBox(height: 12),
                   DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [_teal, _tealDark],
-                      ),
+                      gradient: _saving
+                          ? const LinearGradient(colors: [_card, _card])
+                          : const LinearGradient(colors: [_teal, _tealDark]),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () => _salvar(context),
+                        onPressed: _saving ? null : _salvar,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.transparent,
                           shadowColor: Colors.transparent,
@@ -321,20 +451,29 @@ class NfceConfirmacaoPage extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        child: const Text(
-                          'Salvar',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                          ),
-                        ),
+                        child: _saving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Salvar',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   TextButton(
-                    onPressed: () => context.pop(),
+                    onPressed: _saving ? null : () => context.pop(),
                     child: const Text(
                       'Descartar',
                       style: TextStyle(color: _textSecondary, fontSize: 14),
@@ -348,4 +487,11 @@ class NfceConfirmacaoPage extends StatelessWidget {
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Exceptions
+// ---------------------------------------------------------------------------
+class _DuplicateChaveException implements Exception {
+  const _DuplicateChaveException();
 }

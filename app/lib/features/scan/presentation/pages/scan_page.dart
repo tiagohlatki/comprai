@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/utils/route_names.dart';
 import '../../domain/entities/nfce_data.dart';
@@ -23,6 +24,8 @@ class _ScanPageState extends State<ScanPage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _scanLineCtrl;
   bool _scanned = false;
+  bool _loading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -40,58 +43,63 @@ class _ScanPageState extends State<ScanPage>
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_scanned) return;
+    if (_scanned || _loading) return;
     final rawValue = capture.barcodes.firstOrNull?.rawValue;
     if (rawValue == null) return;
 
-    _scanned = true;
+    setState(() {
+      _scanned = true;
+      _loading = true;
+      _errorMessage = null;
+    });
 
-    final chave = rawValue.length == 44
-        ? rawValue
-        : rawValue.padRight(44, '0').substring(0, 44);
+    try {
+      final nfceData = await _consultarSefaz(rawValue);
+      if (!mounted) return;
+      await context.push(RouteNames.nfceConfirmacao, extra: nfceData);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errorMessage = _friendlyError(e));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _scanned = false;
+          _loading = false;
+        });
+      }
+    }
+  }
 
-    final nfceData = NfceData(
-      chave: chave,
-      estabelecimento: const NfceEstabelecimento(
-        cnpj: '04.614.516/0001-98',
-        nome: 'Supermercado Condor',
-        endereco: 'Av. Brasil, 123 - Maringá/PR',
-        cidade: 'Maringá',
-        estado: 'PR',
-      ),
-      itens: const [
-        NfceItem(
-          nome: 'Arroz Tio João 5kg',
-          quantidade: 1,
-          precoUnitario: 24.90,
-          precoTotal: 24.90,
-        ),
-        NfceItem(
-          nome: 'Feijão Carioca 1kg',
-          quantidade: 1,
-          precoUnitario: 8.75,
-          precoTotal: 8.75,
-        ),
-        NfceItem(
-          nome: 'Óleo de Soja 900ml',
-          quantidade: 1,
-          precoUnitario: 7.49,
-          precoTotal: 7.49,
-        ),
-        NfceItem(
-          nome: 'Leite Integral 1L',
-          ean: '7891000100103',
-          quantidade: 2,
-          precoUnitario: 4.29,
-          precoTotal: 8.58,
-        ),
-      ],
-      total: 49.72,
-      dataCompra: DateTime.now(),
+  Future<NfceData> _consultarSefaz(String rawValue) async {
+    final response = await Supabase.instance.client.functions.invoke(
+      'consultar-nfce',
+      body: {'url': rawValue},
     );
 
-    await context.push(RouteNames.nfceConfirmacao, extra: nfceData);
-    _scanned = false;
+    final data = response.data;
+    if (data == null) {
+      throw Exception('Resposta vazia da Edge Function');
+    }
+
+    if (data is Map<String, dynamic> && data.containsKey('error')) {
+      throw Exception(data['error']);
+    }
+
+    return NfceData.fromJson(data as Map<String, dynamic>);
+  }
+
+  String _friendlyError(Object e) {
+    final msg = e.toString();
+    if (msg.contains('44 dígitos') || msg.contains('não encontrada')) {
+      return 'QR Code inválido. Certifique-se de escanear uma NFC-e.';
+    }
+    if (msg.contains('status 5') || msg.contains('status 4')) {
+      return 'Portal da SEFAZ indisponível. Tente novamente em breve.';
+    }
+    if (msg.contains('timeout') || msg.contains('SocketException')) {
+      return 'Sem conexão com a internet.';
+    }
+    return 'Erro ao consultar NFC-e. Tente novamente.';
   }
 
   @override
@@ -105,7 +113,12 @@ class _ScanPageState extends State<ScanPage>
           // Grain overlay
           CustomPaint(painter: _CameraGrainPainter(), size: Size.infinite),
           // Spotlight overlay with scan line
-          _SpotlightOverlay(scanLine: _scanLineCtrl),
+          _SpotlightOverlay(
+            scanLine: _scanLineCtrl,
+            isLoading: _loading,
+            errorMessage: _errorMessage,
+            onDismissError: () => setState(() => _errorMessage = null),
+          ),
           // Top bar
           SafeArea(
             child: Padding(
@@ -141,9 +154,21 @@ class _ScanPageState extends State<ScanPage>
   }
 }
 
+// ---------------------------------------------------------------------------
+// Spotlight overlay
+// ---------------------------------------------------------------------------
 class _SpotlightOverlay extends StatelessWidget {
-  const _SpotlightOverlay({required this.scanLine});
+  const _SpotlightOverlay({
+    required this.scanLine,
+    required this.isLoading,
+    required this.errorMessage,
+    required this.onDismissError,
+  });
+
   final AnimationController scanLine;
+  final bool isLoading;
+  final String? errorMessage;
+  final VoidCallback onDismissError;
 
   @override
   Widget build(BuildContext context) {
@@ -181,42 +206,59 @@ class _SpotlightOverlay extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(cutoutRadius + 1.5),
                   border: Border.all(
-                    color: _teal.withValues(alpha: 0.8),
+                    color: isLoading
+                        ? Colors.white.withValues(alpha: 0.4)
+                        : _teal.withValues(alpha: 0.8),
                     width: 1.5,
                   ),
                 ),
               ),
             ),
-            // Animated scan line
-            AnimatedBuilder(
-              animation: scanLine,
-              builder: (context, _) {
-                final y = cutoutTop + scanLine.value * cutoutSize;
-                return Positioned(
-                  left: cutoutLeft + 8,
-                  top: y,
-                  width: cutoutSize - 16,
-                  height: 2.5,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          _teal.withValues(alpha: 0),
-                          _teal,
-                          _teal.withValues(alpha: 0),
+            // Animated scan line (hidden while loading)
+            if (!isLoading)
+              AnimatedBuilder(
+                animation: scanLine,
+                builder: (context, _) {
+                  final y = cutoutTop + scanLine.value * cutoutSize;
+                  return Positioned(
+                    left: cutoutLeft + 8,
+                    top: y,
+                    width: cutoutSize - 16,
+                    height: 2.5,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            _teal.withValues(alpha: 0),
+                            _teal,
+                            _teal.withValues(alpha: 0),
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _teal.withValues(alpha: 0.6),
+                            blurRadius: 6,
+                          ),
                         ],
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _teal.withValues(alpha: 0.6),
-                          blurRadius: 6,
-                        ),
-                      ],
                     ),
+                  );
+                },
+              ),
+            // Loading spinner inside cutout
+            if (isLoading)
+              Positioned(
+                left: cutoutLeft,
+                top: cutoutTop,
+                width: cutoutSize,
+                height: cutoutSize,
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: _teal,
+                    strokeWidth: 2.5,
                   ),
-                );
-              },
-            ),
+                ),
+              ),
             // Bottom sheet
             Positioned(
               bottom: 0,
@@ -229,48 +271,12 @@ class _SpotlightOverlay extends StatelessWidget {
                   borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                   border: Border(top: BorderSide(color: _border)),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: _teal,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: _teal,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          'Buscando QR Code...',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Mantenha a câmera estável e bem iluminada',
-                      style: TextStyle(color: _textSecondary, fontSize: 12),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
+                child: errorMessage != null
+                    ? _ErrorSheet(
+                        message: errorMessage!,
+                        onDismiss: onDismissError,
+                      )
+                    : _StatusSheet(isLoading: isLoading),
               ),
             ),
           ],
@@ -280,6 +286,119 @@ class _SpotlightOverlay extends StatelessWidget {
   }
 }
 
+class _StatusSheet extends StatelessWidget {
+  const _StatusSheet({required this.isLoading});
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 36,
+          height: 4,
+          decoration: BoxDecoration(
+            color: _teal,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: isLoading ? Colors.white : _teal,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              isLoading ? 'Consultando SEFAZ…' : 'Buscando QR Code...',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          isLoading
+              ? 'Aguarde, buscando dados da nota fiscal'
+              : 'Mantenha a câmera estável e bem iluminada',
+          style: const TextStyle(color: _textSecondary, fontSize: 12),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+}
+
+class _ErrorSheet extends StatelessWidget {
+  const _ErrorSheet({required this.message, required this.onDismiss});
+  final String message;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 36,
+          height: 4,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEF4444),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: Color(0xFFEF4444),
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: TextButton(
+            onPressed: onDismiss,
+            style: TextButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444).withValues(alpha: 0.15),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text(
+              'Tentar novamente',
+              style: TextStyle(color: Color(0xFFEF4444)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Painters & Clippers
+// ---------------------------------------------------------------------------
 class _CutoutClipper extends CustomClipper<Path> {
   const _CutoutClipper({required this.cutoutRect, required this.radius});
   final Rect cutoutRect;
