@@ -1,4 +1,5 @@
 import 'package:dartz/dartz.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:injectable/injectable.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -46,6 +47,23 @@ class AuthRepository implements IAuthRepository {
         return left(const AuthFailure('Cadastro sem usuário retornado'));
       }
       return right(UsuarioModel.fromSupabaseUser(user));
+    } on AuthException catch (e) {
+      return left(AuthFailure(e.message));
+    } catch (_) {
+      return left(const NetworkFailure('Erro de conexão. Tente novamente.'));
+    }
+  }
+
+  @override
+  Future<Either<Failure, Unit>> loginComGoogle() async {
+    try {
+      // redirectTo aponta para a porta real do app em desenvolvimento web
+      final redirectTo = kIsWeb ? Uri.base.origin : null;
+      await _client.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: redirectTo,
+      );
+      return right(unit);
     } on AuthException catch (e) {
       return left(AuthFailure(e.message));
     } catch (_) {

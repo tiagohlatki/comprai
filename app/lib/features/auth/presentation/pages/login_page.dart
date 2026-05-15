@@ -7,6 +7,7 @@ import '../../../../core/utils/route_names.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
+import '../widgets/auth_dark_widgets.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -38,102 +39,108 @@ class _LoginPageState extends State<LoginPage> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(state.mensagem),
-                backgroundColor: Colors.red,
+                backgroundColor: const Color(0xFFEF4444),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             );
           }
         },
         builder: (context, state) {
+          final isLoading = state is AuthCarregando;
           return Scaffold(
-            body: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
+            backgroundColor: Colors.transparent,
+            body: AuthDarkBackground(
+              child: SafeArea(
                 child: Form(
                   key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Spacer(),
-                      Text(
-                        'comprai',
-                        style: Theme.of(context).textTheme.headlineLarge
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                        textAlign: TextAlign.center,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight:
+                            MediaQuery.of(context).size.height -
+                            MediaQuery.of(context).padding.top -
+                            MediaQuery.of(context).padding.bottom,
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Compare preços e economize nas compras',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                        textAlign: TextAlign.center,
-                      ),
-                      const Spacer(),
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
-                          labelText: 'E-mail',
-                          prefixIcon: Icon(Icons.email_outlined),
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Informe seu e-mail';
-                          }
-                          if (!value.contains('@')) return 'E-mail inválido';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _senhaController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Senha',
-                          prefixIcon: Icon(Icons.lock_outlined),
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Informe sua senha';
-                          }
-                          if (value.length < 6) return 'Mínimo 6 caracteres';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton(
-                        onPressed: state is AuthCarregando
-                            ? null
-                            : () {
-                                if (_formKey.currentState!.validate()) {
-                                  context.read<AuthBloc>().add(
-                                    AuthLoginSolicitado(
-                                      email: _emailController.text.trim(),
-                                      senha: _senhaController.text,
+                      child: IntrinsicHeight(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Spacer(flex: 2),
+                            const AuthLogo(),
+                            const Spacer(flex: 2),
+                            GoogleSignInButton(
+                              onPressed: isLoading
+                                  ? null
+                                  : () => context.read<AuthBloc>().add(
+                                      const AuthGoogleLoginSolicitado(),
                                     ),
-                                  );
+                            ),
+                            const SizedBox(height: 16),
+                            const AuthDividerOr(),
+                            const SizedBox(height: 16),
+                            AuthDarkInput(
+                              controller: _emailController,
+                              label: 'E-mail',
+                              icon: Icons.email_outlined,
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) {
+                                  return 'Informe seu e-mail';
                                 }
+                                if (!v.contains('@')) return 'E-mail inválido';
+                                return null;
                               },
-                        child: state is AuthCarregando
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('Entrar'),
+                            ),
+                            const SizedBox(height: 12),
+                            AuthDarkInput(
+                              controller: _senhaController,
+                              label: 'Senha',
+                              icon: Icons.lock_outlined,
+                              obscure: true,
+                              validator: (v) {
+                                if (v == null || v.isEmpty) {
+                                  return 'Informe sua senha';
+                                }
+                                if (v.length < 6) return 'Mínimo 6 caracteres';
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 24),
+                            AuthGradientButton(
+                              label: 'Entrar',
+                              isLoading: isLoading,
+                              onPressed: isLoading
+                                  ? null
+                                  : () {
+                                      if (_formKey.currentState!.validate()) {
+                                        context.read<AuthBloc>().add(
+                                          AuthLoginSolicitado(
+                                            email: _emailController.text.trim(),
+                                            senha: _senhaController.text,
+                                          ),
+                                        );
+                                      }
+                                    },
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: isLoading
+                                  ? null
+                                  : () => context.go(RouteNames.register),
+                              child: const Text(
+                                'Não tem conta? Cadastre-se',
+                                style: TextStyle(color: Color(0xFF6EE7B7)),
+                              ),
+                            ),
+                            const Spacer(),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 16),
-                      TextButton(
-                        onPressed: () => context.go(RouteNames.register),
-                        child: const Text('Não tem conta? Cadastre-se'),
-                      ),
-                      const Spacer(),
-                    ],
+                    ),
                   ),
                 ),
               ),

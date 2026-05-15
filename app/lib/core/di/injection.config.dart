@@ -10,6 +10,8 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'package:comprai/core/di/injection.dart' as _i136;
+import 'package:comprai/features/auth/application/login_com_google_use_case.dart'
+    as _i312;
 import 'package:comprai/features/auth/application/login_use_case.dart' as _i567;
 import 'package:comprai/features/auth/application/registrar_use_case.dart'
     as _i678;
@@ -45,11 +47,16 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i678.RegistrarUseCase>(
       () => _i678.RegistrarUseCase(gh<_i427.IAuthRepository>()),
     );
+    gh.lazySingleton<_i312.LoginComGoogleUseCase>(
+      () => _i312.LoginComGoogleUseCase(gh<_i427.IAuthRepository>()),
+    );
     gh.factory<_i633.AuthBloc>(
       () => _i633.AuthBloc(
         gh<_i567.LoginUseCase>(),
         gh<_i678.RegistrarUseCase>(),
         gh<_i805.SairUseCase>(),
+        gh<_i312.LoginComGoogleUseCase>(),
+        gh<_i427.IAuthRepository>(),
       ),
     );
     return this;

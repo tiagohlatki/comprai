@@ -14,6 +14,8 @@ abstract interface class IAuthRepository {
     required String senha,
   });
 
+  Future<Either<Failure, Unit>> loginComGoogle();
+
   Future<Either<Failure, Unit>> sair();
 
   Usuario? get usuarioAtual;
