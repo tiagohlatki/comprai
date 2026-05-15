@@ -306,7 +306,7 @@ function parseEndereco(
 // --- Itens --------------------------------------------------------------
 function extractItens(
   doc: ReturnType<DOMParser["parseFromString"]>,
-  html: string,
+  _html: string,
 ): NfceItem[] {
   // Layout 1 (mais comum no BR): #tabResult com spans por linha
   // <tr id="Item + N"><td><span class="txtTit2">NOME</span>
@@ -493,7 +493,7 @@ function extractTotal(
 
 // --- Data da compra -----------------------------------------------------
 function extractDataCompra(
-  doc: ReturnType<DOMParser["parseFromString"]>,
+  _doc: ReturnType<DOMParser["parseFromString"]>,
   html: string,
 ): string {
   // Padrão: DD/MM/YYYY HH:MM:SS ou DD/MM/YYYY
