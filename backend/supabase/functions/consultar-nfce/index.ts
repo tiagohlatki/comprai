@@ -156,8 +156,17 @@ function parseSefazHtml(html: string, chave: string): NfceResult {
   const nome = extractNome(doc, html);
   const { endereco, cidade, estado } = extractEndereco(doc, html);
   const itens = extractItens(doc, html);
-  const total = extractTotal(doc, html);
+  const totalExtraido = extractTotal(doc, html);
+  const totalItens = itens.reduce((sum, i) => sum + i.precoTotal, 0);
+  // Aceita o total extraído apenas se estiver dentro de 1% da soma dos itens.
+  // Evita valores corrompidos por seletores que pegam containers com campos concatenados.
+  const totalOk =
+    totalExtraido > 0 &&
+    totalItens > 0 &&
+    Math.abs(totalExtraido - totalItens) / totalItens < 0.01;
+  const total = totalOk ? totalExtraido : totalItens;
   const dataCompra = extractDataCompra(doc, html);
+
 
   return {
     chave,
@@ -299,35 +308,46 @@ function extractItens(
   doc: ReturnType<DOMParser["parseFromString"]>,
   html: string,
 ): NfceItem[] {
-  // Tenta encontrar tabela de itens
+  // Layout 1 (mais comum no BR): #tabResult com spans por linha
+  // <tr id="Item + N"><td><span class="txtTit2">NOME</span>
+  //   <span class="Rqtd">Qtde.: X</span>
+  //   <span class="RvlUnit">Vl. Unit.: X</span>
+  // </td><td align="right">VL_TOTAL</td></tr>
+  const tabResult = doc?.querySelector("#tabResult");
+  if (tabResult) {
+    const rows = tabResult.querySelectorAll("tr");
+    const items = parseSpanRows(rows);
+    if (items.length > 0) return items;
+  }
+
+  // Layout 2: tabela clássica com colunas (desktop/outros estados)
   const tableSelectors = [
-    "#tabResult",
     ".toItens",
     "table.table-striped",
     "#tabelaItens",
     ".itens",
   ];
-
   for (const sel of tableSelectors) {
     const table = doc?.querySelector(sel);
     if (table) {
-      const rows = table.querySelectorAll("tbody tr, tr.odd, tr.even");
+      const rows = (table as Element).querySelectorAll(
+        "tbody tr, tr.odd, tr.even",
+      );
       if (rows.length > 0) {
-        const items = parseItemRows(rows);
+        const items = parseColumnRows(rows);
         if (items.length > 0) return items;
       }
     }
   }
 
-  // Fallback — qualquer tabela com ≥ 4 colunas que pareça conter itens
+  // Layout 3: fallback — qualquer tabela com ≥ 4 colunas
   const tables = doc?.querySelectorAll("table") ?? [];
   for (const table of tables) {
     const rows = (table as Element).querySelectorAll("tbody tr");
     if (rows.length === 0) continue;
     const firstRow = rows[0] as Element;
-    const cells = firstRow.querySelectorAll("td");
-    if (cells.length >= 4) {
-      const items = parseItemRows(rows);
+    if (firstRow.querySelectorAll("td").length >= 4) {
+      const items = parseColumnRows(rows);
       if (items.length > 0) return items;
     }
   }
@@ -335,7 +355,64 @@ function extractItens(
   return [];
 }
 
-function parseItemRows(
+/**
+ * Layout de spans — usado pela maioria dos portais SEFAZ estaduais (mobile-first).
+ * Cada <tr> representa um item; os campos ficam em <span> com classes específicas.
+ */
+function parseSpanRows(
+  rows: ReturnType<Element["querySelectorAll"]>,
+): NfceItem[] {
+  const items: NfceItem[] = [];
+
+  for (const row of rows) {
+    const el = row as Element;
+
+    // Nome do produto
+    const nomeEl =
+      el.querySelector(".txtTit2") ??
+      el.querySelector(".txtTit") ??
+      el.querySelector("[class*='Tit']");
+    const nome = nomeEl?.textContent?.trim() ?? "";
+    if (!nome) continue;
+    if (/total|subtotal|desconto|frete/i.test(nome)) continue;
+
+    // EAN / código — extrai apenas se for numérico de 8–14 dígitos
+    const codEl = el.querySelector(".RCod, [class*='Cod']");
+    const codText = codEl?.textContent?.replace(/[^0-9]/g, "") ?? "";
+    const ean =
+      codText.length >= 8 && codText.length <= 14 ? codText : null;
+
+    // Quantidade — span class="Rqtd", texto: "Qtde.:46,3" ou "46,3"
+    const qtdEl = el.querySelector(".Rqtd, [class*='qtd']");
+    const qtdText = qtdEl?.textContent ?? "1";
+    const quantidade = parseBrNumber(qtdText.replace(/[^0-9.,]/g, "")) || 1;
+
+    // Preço unitário — span class="RvlUnit"
+    const unitEl = el.querySelector(".RvlUnit, [class*='vlUnit'], [class*='VlUnit']");
+    const precoUnitario = parseBrNumber(
+      unitEl?.textContent?.replace(/[^0-9.,]/g, "") ?? "0",
+    );
+
+    // Preço total — segunda <td> da linha ou span class="RvlTot"
+    const totEl =
+      el.querySelector(".RvlTot, [class*='vlTot'], [class*='VlTot']") ??
+      Array.from(el.querySelectorAll("td")).at(-1);
+    const precoTotal =
+      parseBrNumber(totEl?.textContent?.replace(/[^0-9.,]/g, "") ?? "0") ||
+      precoUnitario * quantidade;
+
+    if (precoTotal === 0 && precoUnitario === 0) continue;
+
+    items.push({ nome, ean, quantidade, precoUnitario, precoTotal });
+  }
+
+  return items;
+}
+
+/**
+ * Layout clássico de colunas — alguns estados ainda usam tabela desktop.
+ */
+function parseColumnRows(
   rows: ReturnType<Element["querySelectorAll"]>,
 ): NfceItem[] {
   const items: NfceItem[] = [];
@@ -344,12 +421,10 @@ function parseItemRows(
     const cells = (row as Element).querySelectorAll("td");
     if (cells.length < 4) continue;
 
-    const cellTexts = Array.from(cells).map((c) =>
-      (c as Element).textContent?.trim() ?? ""
+    const cellTexts = Array.from(cells).map(
+      (c) => (c as Element).textContent?.trim() ?? "",
     );
 
-    // Detecta layout: [código, descrição, qtd, un, vlUnit, vlTotal]
-    // ou [descrição, qtd, vlUnit, vlTotal]
     let nome = "";
     let ean: string | null = null;
     let quantidade = 1;
@@ -357,23 +432,21 @@ function parseItemRows(
     let precoTotal = 0;
 
     if (cellTexts.length >= 6) {
-      // Layout completo: código | descrição | qtd | un | vlUnit | vlTotal
+      // código | descrição | qtd | un | vlUnit | vlTotal
       const codigo = cellTexts[0];
       nome = cellTexts[1];
       quantidade = parseBrNumber(cellTexts[2]);
       precoUnitario = parseBrNumber(cellTexts[4]);
       precoTotal = parseBrNumber(cellTexts[5]);
-      // EAN: código numérico de 8, 12 ou 13 dígitos
       if (/^[0-9]{8,14}$/.test(codigo)) ean = codigo;
     } else if (cellTexts.length >= 4) {
-      // Layout reduzido: descrição | qtd | vlUnit | vlTotal
+      // descrição | qtd | vlUnit | vlTotal
       nome = cellTexts[0];
       quantidade = parseBrNumber(cellTexts[1]);
       precoUnitario = parseBrNumber(cellTexts[2]);
       precoTotal = parseBrNumber(cellTexts[3]);
     }
 
-    // Ignora linhas de totais ou cabeçalhos
     if (!nome || precoTotal === 0) continue;
     if (/total|subtotal|desconto|frete/i.test(nome)) continue;
 
@@ -388,30 +461,32 @@ function extractTotal(
   doc: ReturnType<DOMParser["parseFromString"]>,
   html: string,
 ): number {
-  // Busca texto "Valor total" ou "Total" próximo a um valor
-  const totalRegex =
-    /(?:valor\s+total|total\s+a\s+pagar|total\s+nf)[^0-9R$]*R?\$?\s*([0-9]{1,3}(?:[.,][0-9]{3})*[.,][0-9]{2})/i;
-
-  const plainText = html.replace(/<[^>]+>/g, " ");
-  const m = plainText.match(totalRegex);
-  if (m) return parseBrNumber(m[1]);
-
-  // Seletores comuns para o total
-  const selectors = [
-    "#totalNota",
-    ".totalNota",
-    "#vNF",
-    ".vNF",
-    "#pTot td:last-child",
-  ];
-  for (const sel of selectors) {
-    const el = doc?.querySelector(sel);
-    if (el) {
-      const t = (el as Element).textContent?.trim() ?? "";
-      const v = parseBrNumber(t);
-      if (v > 0) return v;
+  // Estratégia 1: procura linha da tabela que contenha "Valor total" e pega
+  // o valor da célula adjacente (evita concatenar qtd. de itens + total).
+  const tables = doc?.querySelectorAll("table") ?? [];
+  for (const table of tables) {
+    const rows = (table as Element).querySelectorAll("tr");
+    for (const row of rows) {
+      const cells = (row as Element).querySelectorAll("td");
+      if (cells.length < 2) continue;
+      const label = (cells[0] as Element).textContent ?? "";
+      if (/valor\s+total|total\s+nf|total\s+a\s+pagar/i.test(label)) {
+        const valueCell = cells[cells.length - 1] as Element;
+        const v = parseBrNumber(
+          valueCell.textContent?.replace(/[^\d.,]/g, "") ?? "",
+        );
+        if (v > 0) return v;
+      }
     }
   }
+
+  // Estratégia 2: regex no HTML bruto — busca o número logo após a tag que
+  // contém "Valor total" ou "Vl. Total", sem cruzar outras tags (<).
+  // Ex: ">Valor total R$:</span><span>314,84<"  ou  ">Vl. Total</span>...314,84<"
+  const totalRegex =
+    /(?:valor\s+total|vl\.?\s*total|total\s+nf|total\s+a\s+pagar)[^<]{0,60}?>\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})\s*</i;
+  const m = html.match(totalRegex);
+  if (m) return parseBrNumber(m[1]);
 
   return 0;
 }
