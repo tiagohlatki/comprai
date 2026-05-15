@@ -71,30 +71,5 @@ jobs:
       - name: Format check
         run: deno fmt --check backend/supabase/functions/
 
-  # ──────────────────────────────────────────────────────────────
-  # Integration tests (Node + Supabase local)
-  # ──────────────────────────────────────────────────────────────
-  integration:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: [quality, deno-quality]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
-
-      - name: Start Supabase local
-        run: supabase start
-        working-directory: backend
-
-      - name: Run integration tests
-        run: npm run test:integration --workspaces --if-present
-        working-directory: backend/functions
-
-      - name: Stop Supabase
-        run: supabase stop
-        working-directory: backend
-        if: always()
+  # Integration tests omitidos até as funções Node serem implementadas.
+  # Re-adicionar quando backend/functions tiver package.json raiz com workspaces.
