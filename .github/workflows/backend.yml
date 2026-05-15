@@ -4,14 +4,19 @@ on:
   push:
     paths:
       - 'backend/functions/**'
+      - 'backend/supabase/functions/**'
       - '.github/workflows/backend.yml'
   pull_request:
     paths:
       - 'backend/functions/**'
+      - 'backend/supabase/functions/**'
 
 jobs:
+  # ──────────────────────────────────────────────────────────────
+  # Node.js functions (backend/functions/*)
+  # ──────────────────────────────────────────────────────────────
   quality:
-    name: Quality & Tests
+    name: Quality & Tests (Node)
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -40,10 +45,36 @@ jobs:
       - name: Unit tests
         run: npm test -- --passWithNoTests
 
+  # ──────────────────────────────────────────────────────────────
+  # Deno Edge Functions (backend/supabase/functions/*)
+  # ──────────────────────────────────────────────────────────────
+  deno-quality:
+    name: Quality (Deno Edge Functions)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check consultar-nfce
+        run: deno check backend/supabase/functions/consultar-nfce/index.ts
+
+      - name: Lint consultar-nfce
+        run: deno lint backend/supabase/functions/consultar-nfce/index.ts
+
+      - name: Format check
+        run: deno fmt --check backend/supabase/functions/
+
+  # ──────────────────────────────────────────────────────────────
+  # Integration tests (Node + Supabase local)
+  # ──────────────────────────────────────────────────────────────
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
-    needs: quality
+    needs: [quality, deno-quality]
 
     steps:
       - uses: actions/checkout@v4
